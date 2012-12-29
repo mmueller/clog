@@ -65,6 +65,7 @@
 #include <fcntl.h>
 #include <stdarg.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
@@ -411,7 +412,9 @@ size_t
 _clog_append_int(char **dst, char *orig_buf, long int d, size_t cur_size)
 {
     char buf[40]; /* Enough for 128-bit decimal */
-    sprintf(buf, "%ld", d);
+    if (snprintf(buf, 40, "%ld", d) >= 40) {
+        return cur_size;
+    }
     return _clog_append_str(dst, orig_buf, buf, cur_size);
 }
 
@@ -429,6 +432,22 @@ _clog_append_time(char **dst, char *orig_buf, struct tm *lt,
     return cur_size;
 }
 
+const char *
+_clog_basename(const char *path)
+{
+    const char *slash = strrchr(path, '/');
+    if (slash) {
+        path = slash + 1;
+    }
+#ifdef _WIN32
+    slash = strrchr(path, '\\');
+    if (slash) {
+        path = slash + 1;
+    }
+#endif
+    return path;
+}
+
 char *
 _clog_format(const struct clog *logger, char buf[], size_t buf_size,
              const char *sfile, int sline, const char *level,
@@ -442,6 +461,7 @@ _clog_format(const struct clog *logger, char buf[], size_t buf_size,
     time_t t = time(NULL);
     struct tm *lt = localtime(&t);
 
+    sfile = _clog_basename(sfile);
     result[0] = 0;
     for (i = 0; i < fmtlen; ++i) {
         if (state == NORMAL) {
