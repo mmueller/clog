@@ -45,7 +45,11 @@
  * every time. (It could be prettier with variadic macros, but that requires
  * C99 or C++11 to be standards compliant.)
  *
- * License: BSD.
+ * License: Do whatever you want. It would be nice if you contribute
+ * improvements as pull requests here:
+ *
+ *   https://github.com/mmueller/clog
+ *
  * Copyright 2013 Mike Mueller <mike@subfocal.net>.
  */
 
@@ -376,7 +380,7 @@ clog_set_fmt(int id, const char *fmt)
 /* Internal functions */
 
 size_t
-_clog_append_str(char **dst, const char *src, size_t cur_size)
+_clog_append_str(char **dst, char *orig_buf, const char *src, size_t cur_size)
 {
     size_t new_size = cur_size;
 
@@ -384,7 +388,12 @@ _clog_append_str(char **dst, const char *src, size_t cur_size)
         new_size *= 2;
     }
     if (new_size != cur_size) {
-        *dst = (char *) realloc(*dst, new_size);
+        if (*dst == orig_buf) {
+            *dst = (char *) malloc(new_size);
+            strcpy(*dst, orig_buf);
+        } else {
+            *dst = (char *) realloc(*dst, new_size);
+        }
     }
 
     strcat(*dst, src);
@@ -392,20 +401,15 @@ _clog_append_str(char **dst, const char *src, size_t cur_size)
 }
 
 size_t
-_clog_append_int(char **dst, int d, size_t cur_size)
+_clog_append_int(char **dst, char *orig_buf, int d, size_t cur_size)
 {
     char buf[20]; /* Enough for 64-bit decimal */
     sprintf(buf, "%d", d);
-    if (strlen(*dst) + 20 >= cur_size) {
-        cur_size *= 2;
-        *dst = (char *) realloc(*dst, cur_size);
-    }
-    strcat(*dst, buf);
-    return cur_size;
+    return _clog_append_str(dst, orig_buf, buf, cur_size);
 }
 
 size_t
-_clog_append_time(char **dst, const char *fmt, size_t cur_size)
+_clog_append_time(char **dst, char *orig_buf, const char *fmt, size_t cur_size)
 {
     char buf[CLOG_DATETIME_LENGTH];
     time_t t = time(NULL);
@@ -413,22 +417,19 @@ _clog_append_time(char **dst, const char *fmt, size_t cur_size)
     size_t result = strftime(buf, CLOG_DATETIME_LENGTH, fmt, lt);
 
     if (result > 0) {
-        if (strlen(buf) + strlen(*dst) >= cur_size) {
-            cur_size *= 2;
-            *dst = (char *) realloc(*dst, cur_size);
-        }
-        strcat(*dst, buf);
+        return _clog_append_str(dst, orig_buf, buf, cur_size);
     }
 
     return cur_size;
 }
 
 char *
-_clog_format(const struct clog *logger, const char *sfile, int sline,
-             const char *level, const char *message)
+_clog_format(const struct clog *logger, char buf[], size_t buf_size,
+             const char *sfile, int sline, const char *level,
+             const char *message)
 {
-    size_t cur_size = 4096;
-    char *result = (char *) malloc(cur_size);
+    size_t cur_size = buf_size;
+    char *result = buf;
     enum { NORMAL, SUBST } state = NORMAL;
     size_t fmtlen = strlen(logger->fmt);
     size_t i;
@@ -441,32 +442,33 @@ _clog_format(const struct clog *logger, const char *sfile, int sline,
             } else {
                 char str[2] = { 0 };
                 str[0] = logger->fmt[i];
-                cur_size = _clog_append_str(&result, str, cur_size);
+                cur_size = _clog_append_str(&result, buf, str, cur_size);
             }
         } else {
             switch (logger->fmt[i]) {
                 case '%':
-                    cur_size = _clog_append_str(&result, "%", cur_size);
+                    cur_size = _clog_append_str(&result, buf, "%", cur_size);
                     break;
                 case 't':
-                    cur_size = _clog_append_time(&result, logger->time_fmt,
-                                                 cur_size);
+                    cur_size = _clog_append_time(&result, buf,
+                                                 logger->time_fmt, cur_size);
                     break;
                 case 'd':
-                    cur_size = _clog_append_time(&result, logger->date_fmt,
-                                                 cur_size);
+                    cur_size = _clog_append_time(&result, buf,
+                                                 logger->date_fmt, cur_size);
                     break;
                 case 'l':
-                    cur_size = _clog_append_str(&result, level, cur_size);
+                    cur_size = _clog_append_str(&result, buf, level, cur_size);
                     break;
                 case 'n':
-                    cur_size = _clog_append_int(&result, sline, cur_size);
+                    cur_size = _clog_append_int(&result, buf, sline, cur_size);
                     break;
                 case 'f':
-                    cur_size = _clog_append_str(&result, sfile, cur_size);
+                    cur_size = _clog_append_str(&result, buf, sfile, cur_size);
                     break;
                 case 'm':
-                    cur_size = _clog_append_str(&result, message, cur_size);
+                    cur_size = _clog_append_str(&result, buf, message,
+                                                cur_size);
                     break;
             }
             state = NORMAL;
@@ -480,8 +482,12 @@ void
 _clog_log(const char *sfile, int sline, enum clog_level level,
           int id, const char *fmt, va_list ap)
 {
+    /* For speed: Use a stack buffer until message exceeds 4096, then switch
+     * to dynamically allocated.  This should greatly reduce the number of
+     * memory allocations (and subsequent fragmentation). */
+    char buf[4096];
     size_t buf_size = 4096;
-    char *buf = (char *) malloc(buf_size);
+    char *dynbuf = buf;
     char *message;
     int result;
     struct clog *logger = _clog_loggers[id];
@@ -495,28 +501,37 @@ _clog_log(const char *sfile, int sline, enum clog_level level,
         return;
     }
 
-    result = vsnprintf(buf, buf_size, fmt, ap);
+    /* Format the message text with the argument list. */
+    result = vsnprintf(dynbuf, buf_size, fmt, ap);
     if ((size_t) result >= buf_size) {
         buf_size = result + 1;
-        buf = (char *) realloc(buf, buf_size);
-        result = vsnprintf(buf, buf_size, fmt, ap);
+        dynbuf = (char *) malloc(buf_size);
+        result = vsnprintf(dynbuf, buf_size, fmt, ap);
         if ((size_t) result >= buf_size) {
             /* Formatting failed -- too large */
             _clog_err("Formatting failed (1).\n");
+            free(dynbuf);
             return;
         }
     }
-    message = _clog_format(logger, sfile, sline,
-                           CLOG_LEVEL_NAMES[level], buf);
-    if (!message) {
-        _clog_err("Formatting failed (2).\n");
-        return;
+
+    /* Format according to log format and write to log */
+    {
+        char message_buf[4096];
+        message = _clog_format(logger, message_buf, 4096, sfile, sline,
+                               CLOG_LEVEL_NAMES[level], dynbuf);
+        if (!message) {
+            _clog_err("Formatting failed (2).\n");
+            return;
+        }
+        result = write(logger->fd, message, strlen(message));
+        if (result == -1) {
+            _clog_err("Unable to write to log file: %s\n", strerror(errno));
+        }
+        if (message != message_buf) {
+            free(message);
+        }
     }
-    result = write(logger->fd, message, strlen(message));
-    if (result == -1) {
-        _clog_err("Unable to write to log file: %s\n", strerror(errno));
-    }
-    free(message);
 }
 
 void
