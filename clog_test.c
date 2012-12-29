@@ -36,6 +36,7 @@ int test_double_init()
     if (clog_init_path(0, TEST_FILE) == 0) {
         return 1;
     }
+    clog_free(0);
     return 0;
 }
 
@@ -212,6 +213,7 @@ int test_bad_format()
     if (clog_set_fmt(0, too_long) == 0) {
         return 1;
     }
+    clog_free(0);
     return 0;
 }
 

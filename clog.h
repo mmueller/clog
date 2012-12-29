@@ -52,6 +52,8 @@
  *   https://github.com/mmueller/clog
  *
  * Copyright 2013 Mike Mueller <mike@subfocal.net>.
+ *
+ * As is; no warranty is provided; use at your own risk.
  */
 
 #ifndef __CLOG_H__
@@ -160,7 +162,8 @@ void clog_error(const char *sfile, int sline, int id, const char *fmt, ...);
 
 /**
  * Set the minimum level of messages that should be written to the log.
- * Messages below this level will not be written.
+ * Messages below this level will not be written.  By default, loggers are
+ * created with level == CLOG_DEBUG.
  *
  * @param id
  * The identifier of the logger.
@@ -175,7 +178,7 @@ int clog_set_level(int id, enum clog_level level);
 
 /**
  * Set the format string used for times.  See strftime(3) for how this string
- * should be defined.
+ * should be defined.  The default format string is CLOG_DEFAULT_TIME_FORMAT.
  *
  * @param fmt
  * The new format string, which must be less than CLOG_FORMAT_LENGTH bytes.
@@ -187,7 +190,7 @@ int clog_set_time_fmt(int id, const char *fmt);
 
 /**
  * Set the format string used for dates.  See strftime(3) for how this string
- * should be defined.
+ * should be defined.  The default format string is CLOG_DEFAULT_DATE_FORMAT.
  *
  * @param fmt
  * The new format string, which must be less than CLOG_FORMAT_LENGTH bytes.
@@ -208,6 +211,8 @@ int clog_set_date_fmt(int id, const char *fmt);
  *     %t: The current time, formatted using the logger's time format.
  *     %l: The log level (one of "DEBUG", "INFO", "WARN", or "ERROR").
  *     %%: A literal percent sign.
+ *
+ * The default format string is CLOG_DEFAULT_FORMAT.
  *
  * @param fmt
  * The new format string, which must be less than CLOG_FORMAT_LENGTH bytes.
