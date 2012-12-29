@@ -5,10 +5,11 @@
  * - Create multiple loggers.
  * - Four log levels (debug, info, warn, error).
  * - Custom formats.
+ * - Fast.
  *
  * Dependencies:
- * - Should conform to C99, C++98 (or above)
- * - POSIX environment
+ * - Should conform to C89, C++98 (or above).
+ * - POSIX environment.
  *
  * USAGE:
  *
@@ -75,6 +76,11 @@
 /* Formatted times and dates should be less than this length. If they are not,
  * they will not appear in the log. */
 #define CLOG_DATETIME_LENGTH 256
+
+/* Default format strings. */
+#define CLOG_DEFAULT_FORMAT "%d %t %f(%n): %l: %m\n"
+#define CLOG_DEFAULT_DATE_FORMAT "%Y-%m-%d"
+#define CLOG_DEFAULT_TIME_FORMAT "%H:%M:%S"
 
 enum clog_level {
     CLOG_DEBUG,
@@ -147,14 +153,10 @@ void clog_free(int id);
  * @param ...
  * Any additional format arguments.
  */
-void
-clog_debug(const char *sfile, int sline, int id, const char *fmt, ...);
-void
-clog_info(const char *sfile, int sline, int id, const char *fmt, ...);
-void
-clog_warn(const char *sfile, int sline, int id, const char *fmt, ...);
-void
-clog_error(const char *sfile, int sline, int id, const char *fmt, ...);
+void clog_debug(const char *sfile, int sline, int id, const char *fmt, ...);
+void clog_info(const char *sfile, int sline, int id, const char *fmt, ...);
+void clog_warn(const char *sfile, int sline, int id, const char *fmt, ...);
+void clog_error(const char *sfile, int sline, int id, const char *fmt, ...);
 
 /**
  * Set the minimum level of messages that should be written to the log.
@@ -296,10 +298,10 @@ clog_init_fd(int id, int fd)
 
     logger->level = CLOG_DEBUG;
     logger->fd = fd;
-    strcpy(logger->fmt, "%d %t %f(%n): %l: %m\n");
-    strcpy(logger->date_fmt, "%Y-%m-%d");
-    strcpy(logger->time_fmt, "%H:%M:%S");
     logger->opened = 0;
+    strcpy(logger->fmt, CLOG_DEFAULT_FORMAT);
+    strcpy(logger->date_fmt, CLOG_DEFAULT_DATE_FORMAT);
+    strcpy(logger->time_fmt, CLOG_DEFAULT_TIME_FORMAT);
 
     _clog_loggers[id] = logger;
     return 0;
@@ -522,6 +524,9 @@ _clog_log(const char *sfile, int sline, enum clog_level level,
                                CLOG_LEVEL_NAMES[level], dynbuf);
         if (!message) {
             _clog_err("Formatting failed (2).\n");
+            if (dynbuf != buf) {
+                free(dynbuf);
+            }
             return;
         }
         result = write(logger->fd, message, strlen(message));
@@ -530,6 +535,9 @@ _clog_log(const char *sfile, int sline, enum clog_level level,
         }
         if (message != message_buf) {
             free(message);
+        }
+        if (dynbuf != buf) {
+            free(dynbuf);
         }
     }
 }

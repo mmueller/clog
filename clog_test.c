@@ -202,18 +202,6 @@ int test_multiple_loggers()
     return 0;
 }
 
-int test_formats_good()
-{
-    /*
-    CHECK_CALL(clog_init_path(0, "clog_test.out"));
-    CHECK_CALL(clog_set_fmt(0, "%t %d %f(%n): %l: %m\n"));
-    CHECK_CALL(clog_set_time_fmt(0, "%H:%M"));
-    CHECK_CALL(clog_set_date_fmt(0, "%Y/%m/%d"));
-    */
-
-    return 0;
-}
-
 int test_bad_format()
 {
     char too_long[300];
@@ -271,7 +259,6 @@ int test_performance()
 
     /* Init */
     CHECK_CALL(clog_init_path(0, TEST_FILE));
-    CHECK_CALL(clog_set_fmt(0, "%f: %l: %m\n"));
 
     /* Run test */
     CHECK_CALL(gettimeofday(&tv, NULL));
@@ -286,9 +273,8 @@ int test_performance()
     /* Goal: 100,000 messages per second. */
     run_time = (end_time - start_time) / (double) MICROS_PER_SEC;
     messages_per_second = messages / run_time;
+    error("  Target 100000 msgs/sec, got %lu.\n", messages_per_second);
     if (messages_per_second < 100000) {
-        error("  Hoping for 100000 messages per second, got %lu.\n",
-              messages_per_second);
         return 1;
     }
 
