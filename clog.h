@@ -403,19 +403,18 @@ _clog_append_str(char **dst, char *orig_buf, const char *src, size_t cur_size)
 }
 
 size_t
-_clog_append_int(char **dst, char *orig_buf, int d, size_t cur_size)
+_clog_append_int(char **dst, char *orig_buf, long int d, size_t cur_size)
 {
-    char buf[20]; /* Enough for 64-bit decimal */
-    sprintf(buf, "%d", d);
+    char buf[40]; /* Enough for 128-bit decimal */
+    sprintf(buf, "%ld", d);
     return _clog_append_str(dst, orig_buf, buf, cur_size);
 }
 
 size_t
-_clog_append_time(char **dst, char *orig_buf, const char *fmt, size_t cur_size)
+_clog_append_time(char **dst, char *orig_buf, struct tm *lt,
+                  const char *fmt, size_t cur_size)
 {
     char buf[CLOG_DATETIME_LENGTH];
-    time_t t = time(NULL);
-    struct tm *lt = localtime(&t);
     size_t result = strftime(buf, CLOG_DATETIME_LENGTH, fmt, lt);
 
     if (result > 0) {
@@ -435,6 +434,8 @@ _clog_format(const struct clog *logger, char buf[], size_t buf_size,
     enum { NORMAL, SUBST } state = NORMAL;
     size_t fmtlen = strlen(logger->fmt);
     size_t i;
+    time_t t = time(NULL);
+    struct tm *lt = localtime(&t);
 
     result[0] = 0;
     for (i = 0; i < fmtlen; ++i) {
@@ -452,11 +453,11 @@ _clog_format(const struct clog *logger, char buf[], size_t buf_size,
                     cur_size = _clog_append_str(&result, buf, "%", cur_size);
                     break;
                 case 't':
-                    cur_size = _clog_append_time(&result, buf,
+                    cur_size = _clog_append_time(&result, buf, lt,
                                                  logger->time_fmt, cur_size);
                     break;
                 case 'd':
-                    cur_size = _clog_append_time(&result, buf,
+                    cur_size = _clog_append_time(&result, buf, lt,
                                                  logger->date_fmt, cur_size);
                     break;
                 case 'l':

@@ -218,11 +218,11 @@ int test_bad_format()
 int test_long_message()
 {
     FILE *f = NULL;
-    char buf[11000];
-    char message[10000];
-    char exp[11000];
-    memset(message, 'b', 9999);
-    message[9999] = 0;
+    char buf[51000];
+    char message[50000];
+    char exp[51000];
+    memset(message, 'b', 49999);
+    message[49999] = 0;
 
     /* Write to the log */
     CHECK_CALL(clog_init_path(0, TEST_FILE));
@@ -236,13 +236,13 @@ int test_long_message()
         return 1;
     }
 
-    if (fgets(buf, 11000, f) == NULL) {
+    if (fgets(buf, 51000, f) == NULL) {
         fclose(f);
         return 1;
     }
     fclose(f);
 
-    snprintf(exp, 11000, "%s: DEBUG: %s\n", THIS_FILE, message);
+    snprintf(exp, 51000, "%s: DEBUG: %s\n", THIS_FILE, message);
     CHECK_CALL(strcmp(buf, exp));
     return 0;
 }
