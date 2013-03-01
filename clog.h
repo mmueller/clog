@@ -46,6 +46,9 @@
  * every time. (It could be prettier with variadic macros, but that requires
  * C99 or C++11 to be standards compliant.)
  *
+ * Errors encountered by clog will be printed to stderr.  You can suppress
+ * these by defining a macro called CLOG_SILENT before including clog.h.
+ *
  * License: Do whatever you want. It would be nice if you contribute
  * improvements as pull requests here:
  *
@@ -84,6 +87,10 @@
 #define CLOG_DEFAULT_FORMAT "%d %t %f(%n): %l: %m\n"
 #define CLOG_DEFAULT_DATE_FORMAT "%Y-%m-%d"
 #define CLOG_DEFAULT_TIME_FORMAT "%H:%M:%S"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 enum clog_level {
     CLOG_DEBUG,
@@ -252,13 +259,6 @@ struct clog {
     int opened;
 };
 
-const char *const CLOG_LEVEL_NAMES[] = {
-    "DEBUG",
-    "INFO",
-    "WARN",
-    "ERROR",
-};
-
 void _clog_err(const char *fmt, ...);
 
 #ifdef CLOG_MAIN
@@ -268,6 +268,13 @@ extern struct clog *_clog_loggers[CLOG_MAX_LOGGERS];
 #endif
 
 #ifdef CLOG_MAIN
+
+const char *const CLOG_LEVEL_NAMES[] = {
+    "DEBUG",
+    "INFO",
+    "WARN",
+    "ERROR",
+};
 
 int
 clog_init_path(int id, const char *const path)
@@ -614,4 +621,9 @@ _clog_err(const char *fmt, ...)
 }
 
 #endif /* CLOG_MAIN */
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
+
 #endif /* __CLOG_H__ */

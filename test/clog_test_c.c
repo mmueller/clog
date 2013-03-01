@@ -14,10 +14,10 @@
 #define CLOG_MAIN
 #include "clog.h"
 
-typedef int (*test_function_t)();
+#include "clog_test.h"
+#include "clog_test_cpp.h"
 
-#define CHECK_CALL(call) do { if ((call) != 0) { return 1; } } while (0)
-#define THIS_FILE "clog_test.c"
+#define THIS_FILE "clog_test_c.c"
 #define TEST_FILE "clog_test.out"
 
 char error_text[16384];
@@ -283,6 +283,8 @@ int test_performance()
     return 0;
 }
 
+typedef int (*test_function_t)();
+
 typedef struct {
     const char *name;
     test_function_t function;
@@ -294,6 +296,7 @@ typedef struct {
 int main(int argc, char *argv[])
 {
     test_case tests[] = {
+        // C tests
         TEST_CASE(test_double_init),
         TEST_CASE(test_file_write),
         TEST_CASE(test_file_write_nonexistent),
@@ -303,6 +306,11 @@ int main(int argc, char *argv[])
         TEST_CASE(test_multiple_loggers),
         TEST_CASE(test_bad_format),
         TEST_CASE(test_long_message),
+
+        // C++ tests
+        TEST_CASE(test_cpp_hello),
+
+        // Performance tests
         TEST_CASE(test_performance)
     };
 
@@ -333,13 +341,14 @@ int main(int argc, char *argv[])
             printf("FAIL\n");
         }
         if (strlen(error_text)) {
-            printf("%s\n", error_text);
+            printf("%s", error_text);
         }
 
         /* Restore global state in case test didn't clean up */
         for (j = 0; j < CLOG_MAX_LOGGERS; j++) {
             _clog_loggers[j] = NULL;
         }
+        error_text[0] = '\0';
     }
     printf("\n");
     if (pass == 0 && fail == 0) {
