@@ -9,11 +9,11 @@ POSIX environment.
 **Features:**
 
 * Implemented as a single header file.
-* Strict C89 / C++98 conformance.
+* C89 / C++98 conformance.\*
 * Multiple loggers (numbered: 0 - 15).
 * Four severity levels (debug, info, warn, error).
 * Customizable log format, time format, date format.
-* Relatively fast (real world 130k logs/sec on my laptop).
+* Relatively fast (real world 180k logs/sec on my laptop).
 * Log to an arbitrary file descriptor (socket, pipe, etc).
 * No licensing restrictions whatsoever.
 
@@ -28,6 +28,12 @@ anything non-standard.
 * Millisecond/microsecond timestamps (will require OS-specific patches).
 * Support custom allocators (rather than malloc).
 * Variadic macros, because those require C99 or C++11.
+
+\* Requires a `vsnprintf` function to be available, which is non-C89.
+   (However, many C environments provide it.)  If you need strict C89
+   conformance, there are freely available `vsnprintf` implementations
+   on the web.  I opted not to include one here because it would defeat
+   the purpose of making clog a small, single-header-file project.
 
 Download
 --------

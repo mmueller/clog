@@ -8,7 +8,7 @@
  * - Fast.
  *
  * Dependencies:
- * - Should conform to C89, C++98 (or above).
+ * - Should conform to C89, C++98 (but requires vsnprintf, unfortunately).
  * - POSIX environment.
  *
  * USAGE:
