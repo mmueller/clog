@@ -235,6 +235,18 @@ int clog_set_fmt(int id, const char *fmt);
  * No need to read below this point.
  */
 
+/*
+ * Portability stuff.
+ */
+
+/* This is not portable, but should work on old Visual C++ compilers. Visual
+ * Studio 2013 defines va_copy, but older versions do not. */
+#ifdef _MSC_VER
+#if _MSC_VER < 1800
+#define va_copy(a,b) ((a) = (b))
+#endif
+#endif
+
 /**
  * The C logger structure.
  */
@@ -523,6 +535,7 @@ _clog_log(const char *sfile, int sline, enum clog_level level,
     size_t buf_size = 4096;
     char *dynbuf = buf;
     char *message;
+    va_list ap_copy;
     int result;
     struct clog *logger = _clog_loggers[id];
 
@@ -536,18 +549,21 @@ _clog_log(const char *sfile, int sline, enum clog_level level,
     }
 
     /* Format the message text with the argument list. */
+    va_copy(ap_copy, ap);
     result = vsnprintf(dynbuf, buf_size, fmt, ap);
     if ((size_t) result >= buf_size) {
         buf_size = result + 1;
         dynbuf = (char *) malloc(buf_size);
-        result = vsnprintf(dynbuf, buf_size, fmt, ap);
+        result = vsnprintf(dynbuf, buf_size, fmt, ap_copy);
         if ((size_t) result >= buf_size) {
             /* Formatting failed -- too large */
             _clog_err("Formatting failed (1).\n");
+            va_end(ap_copy);
             free(dynbuf);
             return;
         }
     }
+    va_end(ap_copy);
 
     /* Format according to log format and write to log */
     {
@@ -580,6 +596,7 @@ clog_debug(const char *sfile, int sline, int id, const char *fmt, ...)
     va_list ap;
     va_start(ap, fmt);
     _clog_log(sfile, sline, CLOG_DEBUG, id, fmt, ap);
+    va_end(ap);
 }
 
 void
@@ -588,6 +605,7 @@ clog_info(const char *sfile, int sline, int id, const char *fmt, ...)
     va_list ap;
     va_start(ap, fmt);
     _clog_log(sfile, sline, CLOG_INFO, id, fmt, ap);
+    va_end(ap);
 }
 
 void
@@ -596,6 +614,7 @@ clog_warn(const char *sfile, int sline, int id, const char *fmt, ...)
     va_list ap;
     va_start(ap, fmt);
     _clog_log(sfile, sline, CLOG_WARN, id, fmt, ap);
+    va_end(ap);
 }
 
 void
@@ -604,6 +623,7 @@ clog_error(const char *sfile, int sline, int id, const char *fmt, ...)
     va_list ap;
     va_start(ap, fmt);
     _clog_log(sfile, sline, CLOG_ERROR, id, fmt, ap);
+    va_end(ap);
 }
 
 void
@@ -616,6 +636,7 @@ _clog_err(const char *fmt, ...)
 
     va_start(ap, fmt);
     vfprintf(stderr, fmt, ap);
+    va_end(ap);
 #endif
 }
 

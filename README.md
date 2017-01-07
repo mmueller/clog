@@ -9,7 +9,7 @@ POSIX environment.
 **Features:**
 
 * Implemented as a single header file.
-* C89 / C++98 conformance.\*
+* C99 / C++98 conformance.\*
 * Multiple loggers (numbered: 0 - 15).
 * Four severity levels (debug, info, warn, error).
 * Customizable log format, time format, date format.
@@ -27,13 +27,13 @@ anything non-standard.
 
 * Millisecond/microsecond timestamps (will require OS-specific patches).
 * Support custom allocators (rather than malloc).
-* Variadic macros, because those require C99 or C++11.
+* Variadic macros, because those are not C++98 compatible. (Considering adding
+  anyway soon.)
 
-\* Requires a `vsnprintf` function to be available, which is non-C89.
-   (However, many C environments provide it.)  If you need strict C89
-   conformance, there are freely available `vsnprintf` implementations
-   on the web.  I opted not to include one here because it would defeat
-   the purpose of making clog a small, single-header-file project.
+\* Requires `vsnprintf()` and `va_copy()` to exist. These might not be
+   available on every C++98 compiler, so please let me know if you run into a
+   compiler that complains. May work on some C89 compilers, but I'm not
+   supporting C89 officially.
 
 Download
 --------
