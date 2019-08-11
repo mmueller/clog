@@ -20,6 +20,6 @@ check: clog_test
 	@./clog_test
 
 clean:
-	rm -f clog_test clog_test.out *.o
+	rm -f clog_test *.out *.o
 
 .PHONY: clean check

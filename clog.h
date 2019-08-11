@@ -73,6 +73,20 @@
 #include <time.h>
 #include <unistd.h>
 
+/* check whether C/C++ standard supports variadic macros
+ * (they are supported as of C99 and C++11). */
+#ifndef USE_VARIADIC
+#  ifdef __cplusplus
+#    define USE_VARIADIC (__cplusplus >= 201103L)
+#  else
+#    ifdef __STDC_VERSION__
+#      define USE_VARIADIC (__STDC_VERSION__ >= 199901L)
+#    else
+#      define USE_VARIADIC 0
+#    endif
+#  endif
+#endif
+
 /* Number of loggers that can be defined. */
 #define CLOG_MAX_LOGGERS 16
 
@@ -139,8 +153,6 @@ int clog_init_fd(int id, int fd);
  */
 void clog_free(int id);
 
-#define CLOG(id) __FILE__, __LINE__, id
-
 /**
  * Log functions (one per level).  Call these to write messages to the log
  * file.  The first three arguments can be replaced with a call to the CLOG
@@ -163,10 +175,56 @@ void clog_free(int id);
  * @param ...
  * Any additional format arguments.
  */
-void clog_debug(const char *sfile, int sline, int id, const char *fmt, ...);
-void clog_info(const char *sfile, int sline, int id, const char *fmt, ...);
-void clog_warn(const char *sfile, int sline, int id, const char *fmt, ...);
-void clog_error(const char *sfile, int sline, int id, const char *fmt, ...);
+void _clog_debug(const char *sfile, int sline, int id, const char *fmt, ...);
+void _clog_info(const char *sfile, int sline, int id, const char *fmt, ...);
+void _clog_warn(const char *sfile, int sline, int id, const char *fmt, ...);
+void _clog_error(const char *sfile, int sline, int id, const char *fmt, ...);
+
+/**
+ * Variadic macro log functions (one per level). Insert at any point in the
+ * code to write messages to the log file. The first argument is the logger id, 
+ * while the following arguments are the same as for the printf function:
+ *
+ *     clog_debug(MY_LOGGER_ID, "%s is %d log message.", "This", 1);
+ *
+ * @param id
+ * The id of the logger to write to.
+ *
+ * @param fmt
+ * The format string for the message (printf formatting).
+ *
+ * @param ...
+ * Any additional format arguments.
+ *
+ * Note, that these are only available with the standard C99/C++11 or later. 
+ * For earlier versions the behaviour is the same as the clog_xxx log functions. 
+ */
+#if USE_VARIADIC
+/* for backwards compatibility: */
+#define CLOG(id) id 
+
+#define clog_debug(id, ...) _clog_debug(__FILE__, __LINE__, id, __VA_ARGS__)
+#define clog_info(id, ...) _clog_info(__FILE__, __LINE__, id, __VA_ARGS__)
+#define clog_warn(id, ...) _clog_warn(__FILE__, __LINE__, id, __VA_ARGS__)
+#define clog_error(id, ...) _clog_error(__FILE__, __LINE__, id, __VA_ARGS__)
+
+#else
+/* formerly, the macro supplying the linenumber and filename had to be
+ * included in the function call:
+ *
+ * clog_debug(CLOG(MY_LOGGER_ID), "This is a log message.");
+ *
+ * if the C-standard does not support variadic macros or USE_VARIADIC is
+ * defined as `false`, keep it this way:
+ */
+#define CLOG(id) __FILE__, __LINE__, id
+
+/* use dummy macros pointing to the function call */
+#define clog_debug _clog_debug
+#define clog_info _clog_info
+#define clog_warn _clog_warn
+#define clog_error _clog_error
+#endif
 
 /**
  * Set the minimum level of messages that should be written to the log.
@@ -591,7 +649,7 @@ _clog_log(const char *sfile, int sline, enum clog_level level,
 }
 
 void
-clog_debug(const char *sfile, int sline, int id, const char *fmt, ...)
+_clog_debug(const char *sfile, int sline, int id, const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
@@ -600,7 +658,7 @@ clog_debug(const char *sfile, int sline, int id, const char *fmt, ...)
 }
 
 void
-clog_info(const char *sfile, int sline, int id, const char *fmt, ...)
+_clog_info(const char *sfile, int sline, int id, const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
@@ -609,7 +667,7 @@ clog_info(const char *sfile, int sline, int id, const char *fmt, ...)
 }
 
 void
-clog_warn(const char *sfile, int sline, int id, const char *fmt, ...)
+_clog_warn(const char *sfile, int sline, int id, const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
@@ -618,7 +676,7 @@ clog_warn(const char *sfile, int sline, int id, const char *fmt, ...)
 }
 
 void
-clog_error(const char *sfile, int sline, int id, const char *fmt, ...)
+_clog_error(const char *sfile, int sline, int id, const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
