@@ -62,16 +62,12 @@
 #ifndef __CLOG_H__
 #define __CLOG_H__
 
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <errno.h>
-#include <fcntl.h>
 #include <stdarg.h>
-#include <stdlib.h>
+#include <stdlib.h>  // malloc, realloc, free
 #include <stdio.h>
-#include <string.h>
+#include <string.h>  // strcpy, ...
 #include <time.h>
-#include <unistd.h>
+#include <errno.h>   // errno
 
 /* check whether C/C++ standard supports variadic macros
  * (they are supported as of C99 and C++11). */
@@ -88,7 +84,7 @@
 #endif
 
 /* Number of loggers that can be defined. */
-#define CLOG_MAX_LOGGERS 16
+#define CLOG_MAX_LOGGERS FOPEN_MAX  /* (typically 16) */
 
 /* Format strings cannot be longer than this. */
 #define CLOG_FORMAT_LENGTH 256
@@ -142,7 +138,7 @@ int clog_init_path(int id, const char *const path);
  * @return
  * Zero on success, non-zero on failure.
  */
-int clog_init_fd(int id, int fd);
+int clog_init_fd(int id, FILE* fd);
 
 /**
  * Destroy (clean up) a logger.  You should do this at the end of execution,
@@ -314,7 +310,7 @@ struct clog {
     enum clog_level level;
 
     /* The file being written. */
-    int fd;
+    FILE* fd;
 
     /* The format specifier. */
     char fmt[CLOG_FORMAT_LENGTH];
@@ -349,13 +345,13 @@ const char *const CLOG_LEVEL_NAMES[] = {
 int
 clog_init_path(int id, const char *const path)
 {
-    int fd = open(path, O_CREAT | O_WRONLY | O_APPEND, 0666);
-    if (fd == -1) {
+    FILE* fd = fopen(path, "a");
+    if (! fd) {
         _clog_err("Unable to open %s: %s\n", path, strerror(errno));
         return 1;
     }
     if (clog_init_fd(id, fd)) {
-        close(fd);
+        fclose(fd);
         return 1;
     }
     _clog_loggers[id]->opened = 1;
@@ -363,7 +359,7 @@ clog_init_path(int id, const char *const path)
 }
 
 int
-clog_init_fd(int id, int fd)
+clog_init_fd(int id, FILE* fd)
 {
     struct clog *logger;
 
@@ -394,7 +390,7 @@ clog_free(int id)
 {
     if (_clog_loggers[id]) {
         if (_clog_loggers[id]->opened) {
-            close(_clog_loggers[id]->fd);
+            fclose(_clog_loggers[id]->fd);
         }
         free(_clog_loggers[id]);
     }
@@ -594,7 +590,7 @@ _clog_log(const char *sfile, int sline, enum clog_level level,
     char *dynbuf = buf;
     char *message;
     va_list ap_copy;
-    int result;
+    size_t result;
     struct clog *logger = _clog_loggers[id];
 
     if (!logger) {
@@ -613,7 +609,7 @@ _clog_log(const char *sfile, int sline, enum clog_level level,
         buf_size = result + 1;
         dynbuf = (char *) malloc(buf_size);
         result = vsnprintf(dynbuf, buf_size, fmt, ap_copy);
-        if ((size_t) result >= buf_size) {
+        if (result >= buf_size) {
             /* Formatting failed -- too large */
             _clog_err("Formatting failed (1).\n");
             va_end(ap_copy);
@@ -635,8 +631,9 @@ _clog_log(const char *sfile, int sline, enum clog_level level,
             }
             return;
         }
-        result = write(logger->fd, message, strlen(message));
-        if (result == -1) {
+        size_t count = strlen(message);
+        result = fwrite(message, sizeof(char), count, logger->fd);
+        if (result < count) {
             _clog_err("Unable to write to log file: %s\n", strerror(errno));
         }
         if (message != message_buf) {
