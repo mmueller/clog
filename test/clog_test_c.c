@@ -283,6 +283,36 @@ int test_performance()
     return 0;
 }
 
+int test_reuse_logger_id()
+{
+    int i;
+
+    // Create and then free the same logger twice.
+    // Reproduces https://github.com/mmueller/clog/issues/7
+    for (i = 0; i < 2; i++) {
+        char buf[1024];
+        int fd[2];
+        size_t bytes;
+        CHECK_CALL(pipe(fd));
+        CHECK_CALL(clog_init_fd(0, fd[1]));
+        CHECK_CALL(clog_set_fmt(0, "%f: %l: %m\n"));
+        clog_debug(CLOG(0), "Hello, %s!", "world");
+        clog_free(0);
+        close(fd[1]);
+
+        bytes = read(fd[0], buf, 1024);
+        if (bytes <= 0) {
+            close(fd[0]);
+            return 1;
+        }
+        buf[bytes] = 0;
+        close(fd[0]);
+        CHECK_CALL(strcmp(buf, THIS_FILE ": DEBUG: Hello, world!\n"));
+    }
+
+    return 0;
+}
+
 typedef int (*test_function_t)();
 
 typedef struct {
@@ -306,6 +336,7 @@ int main(int argc, char *argv[])
         TEST_CASE(test_multiple_loggers),
         TEST_CASE(test_bad_format),
         TEST_CASE(test_long_message),
+        TEST_CASE(test_reuse_logger_id),
 
         // C++ tests
         TEST_CASE(test_cpp_hello),
