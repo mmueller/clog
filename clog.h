@@ -62,19 +62,29 @@
 #ifndef __CLOG_H__
 #define __CLOG_H__
 
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <errno.h>
-#include <fcntl.h>
 #include <stdarg.h>
-#include <stdlib.h>
+#include <stdlib.h>  // malloc, realloc, free
 #include <stdio.h>
-#include <string.h>
+#include <string.h>  // strcpy, ...
 #include <time.h>
-#include <unistd.h>
+#include <errno.h>   // errno
+
+/* check whether C/C++ standard supports variadic macros
+ * (they are supported as of C99 and C++11). */
+#ifndef USE_VARIADIC
+#  ifdef __cplusplus
+#    define USE_VARIADIC (__cplusplus >= 201103L)
+#  else
+#    ifdef __STDC_VERSION__
+#      define USE_VARIADIC (__STDC_VERSION__ >= 199901L)
+#    else
+#      define USE_VARIADIC 0
+#    endif
+#  endif
+#endif
 
 /* Number of loggers that can be defined. */
-#define CLOG_MAX_LOGGERS 16
+#define CLOG_MAX_LOGGERS FOPEN_MAX  /* (typically 16) */
 
 /* Format strings cannot be longer than this. */
 #define CLOG_FORMAT_LENGTH 256
@@ -128,7 +138,7 @@ int clog_init_path(int id, const char *const path);
  * @return
  * Zero on success, non-zero on failure.
  */
-int clog_init_fd(int id, int fd);
+int clog_init_fd(int id, FILE* fd);
 
 /**
  * Destroy (clean up) a logger.  You should do this at the end of execution,
@@ -138,8 +148,6 @@ int clog_init_fd(int id, int fd);
  * The id of the logger to destroy.
  */
 void clog_free(int id);
-
-#define CLOG(id) __FILE__, __LINE__, id
 
 /**
  * Log functions (one per level).  Call these to write messages to the log
@@ -163,10 +171,56 @@ void clog_free(int id);
  * @param ...
  * Any additional format arguments.
  */
-void clog_debug(const char *sfile, int sline, int id, const char *fmt, ...);
-void clog_info(const char *sfile, int sline, int id, const char *fmt, ...);
-void clog_warn(const char *sfile, int sline, int id, const char *fmt, ...);
-void clog_error(const char *sfile, int sline, int id, const char *fmt, ...);
+void _clog_debug(const char *sfile, int sline, int id, const char *fmt, ...);
+void _clog_info(const char *sfile, int sline, int id, const char *fmt, ...);
+void _clog_warn(const char *sfile, int sline, int id, const char *fmt, ...);
+void _clog_error(const char *sfile, int sline, int id, const char *fmt, ...);
+
+/**
+ * Variadic macro log functions (one per level). Insert at any point in the
+ * code to write messages to the log file. The first argument is the logger id, 
+ * while the following arguments are the same as for the printf function:
+ *
+ *     clog_debug(MY_LOGGER_ID, "%s is %d log message.", "This", 1);
+ *
+ * @param id
+ * The id of the logger to write to.
+ *
+ * @param fmt
+ * The format string for the message (printf formatting).
+ *
+ * @param ...
+ * Any additional format arguments.
+ *
+ * Note, that these are only available with the standard C99/C++11 or later. 
+ * For earlier versions the behaviour is the same as the clog_xxx log functions. 
+ */
+#if USE_VARIADIC
+/* for backwards compatibility: */
+#define CLOG(id) id 
+
+#define clog_debug(id, ...) _clog_debug(__FILE__, __LINE__, id, __VA_ARGS__)
+#define clog_info(id, ...) _clog_info(__FILE__, __LINE__, id, __VA_ARGS__)
+#define clog_warn(id, ...) _clog_warn(__FILE__, __LINE__, id, __VA_ARGS__)
+#define clog_error(id, ...) _clog_error(__FILE__, __LINE__, id, __VA_ARGS__)
+
+#else
+/* formerly, the macro supplying the linenumber and filename had to be
+ * included in the function call:
+ *
+ * clog_debug(CLOG(MY_LOGGER_ID), "This is a log message.");
+ *
+ * if the C-standard does not support variadic macros or USE_VARIADIC is
+ * defined as `false`, keep it this way:
+ */
+#define CLOG(id) __FILE__, __LINE__, id
+
+/* use dummy macros pointing to the function call */
+#define clog_debug _clog_debug
+#define clog_info _clog_info
+#define clog_warn _clog_warn
+#define clog_error _clog_error
+#endif
 
 /**
  * Set the minimum level of messages that should be written to the log.
@@ -256,7 +310,7 @@ struct clog {
     enum clog_level level;
 
     /* The file being written. */
-    int fd;
+    FILE* fd;
 
     /* The format specifier. */
     char fmt[CLOG_FORMAT_LENGTH];
@@ -291,13 +345,13 @@ const char *const CLOG_LEVEL_NAMES[] = {
 int
 clog_init_path(int id, const char *const path)
 {
-    int fd = open(path, O_CREAT | O_WRONLY | O_APPEND, 0666);
-    if (fd == -1) {
+    FILE* fd = fopen(path, "a");
+    if (! fd) {
         _clog_err("Unable to open %s: %s\n", path, strerror(errno));
         return 1;
     }
     if (clog_init_fd(id, fd)) {
-        close(fd);
+        fclose(fd);
         return 1;
     }
     _clog_loggers[id]->opened = 1;
@@ -305,7 +359,7 @@ clog_init_path(int id, const char *const path)
 }
 
 int
-clog_init_fd(int id, int fd)
+clog_init_fd(int id, FILE* fd)
 {
     struct clog *logger;
 
@@ -336,7 +390,7 @@ clog_free(int id)
 {
     if (_clog_loggers[id]) {
         if (_clog_loggers[id]->opened) {
-            close(_clog_loggers[id]->fd);
+            fclose(_clog_loggers[id]->fd);
         }
         free(_clog_loggers[id]);
         _clog_loggers[id] = NULL;
@@ -537,7 +591,7 @@ _clog_log(const char *sfile, int sline, enum clog_level level,
     char *dynbuf = buf;
     char *message;
     va_list ap_copy;
-    int result;
+    size_t result;
     struct clog *logger = _clog_loggers[id];
 
     if (!logger) {
@@ -556,7 +610,7 @@ _clog_log(const char *sfile, int sline, enum clog_level level,
         buf_size = result + 1;
         dynbuf = (char *) malloc(buf_size);
         result = vsnprintf(dynbuf, buf_size, fmt, ap_copy);
-        if ((size_t) result >= buf_size) {
+        if (result >= buf_size) {
             /* Formatting failed -- too large */
             _clog_err("Formatting failed (1).\n");
             va_end(ap_copy);
@@ -578,8 +632,9 @@ _clog_log(const char *sfile, int sline, enum clog_level level,
             }
             return;
         }
-        result = write(logger->fd, message, strlen(message));
-        if (result == -1) {
+        size_t count = strlen(message);
+        result = fwrite(message, sizeof(char), count, logger->fd);
+        if (result < count) {
             _clog_err("Unable to write to log file: %s\n", strerror(errno));
         }
         if (message != message_buf) {
@@ -592,7 +647,7 @@ _clog_log(const char *sfile, int sline, enum clog_level level,
 }
 
 void
-clog_debug(const char *sfile, int sline, int id, const char *fmt, ...)
+_clog_debug(const char *sfile, int sline, int id, const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
@@ -601,7 +656,7 @@ clog_debug(const char *sfile, int sline, int id, const char *fmt, ...)
 }
 
 void
-clog_info(const char *sfile, int sline, int id, const char *fmt, ...)
+_clog_info(const char *sfile, int sline, int id, const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
@@ -610,7 +665,7 @@ clog_info(const char *sfile, int sline, int id, const char *fmt, ...)
 }
 
 void
-clog_warn(const char *sfile, int sline, int id, const char *fmt, ...)
+_clog_warn(const char *sfile, int sline, int id, const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
@@ -619,7 +674,7 @@ clog_warn(const char *sfile, int sline, int id, const char *fmt, ...)
 }
 
 void
-clog_error(const char *sfile, int sline, int id, const char *fmt, ...)
+_clog_error(const char *sfile, int sline, int id, const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
