@@ -71,7 +71,13 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
-#include <unistd.h>
+#ifndef CLOG_MAIN
+    #include <unistd.h>
+#else
+    #define _GNU_SOURCE
+    #include <unistd.h>
+    #include <sys/syscall.h>
+#endif
 
 /* Number of loggers that can be defined. */
 #define CLOG_MAX_LOGGERS 16
@@ -96,7 +102,8 @@ enum clog_level {
     CLOG_DEBUG,
     CLOG_INFO,
     CLOG_WARN,
-    CLOG_ERROR
+    CLOG_ERROR,
+    CLOG_ALWAYS
 };
 
 struct clog;
@@ -167,6 +174,7 @@ void clog_debug(const char *sfile, int sline, int id, const char *fmt, ...);
 void clog_info(const char *sfile, int sline, int id, const char *fmt, ...);
 void clog_warn(const char *sfile, int sline, int id, const char *fmt, ...);
 void clog_error(const char *sfile, int sline, int id, const char *fmt, ...);
+void clog_always(const char *sfile, int sline, int id, const char *fmt, ...);
 
 /**
  * Set the minimum level of messages that should be written to the log.
@@ -217,7 +225,8 @@ int clog_set_date_fmt(int id, const char *fmt);
  *     %m: The message text sent to the logger (after printf formatting).
  *     %d: The current date, formatted using the logger's date format.
  *     %t: The current time, formatted using the logger's time format.
- *     %l: The log level (one of "DEBUG", "INFO", "WARN", or "ERROR").
+ *     %l: The log level (one of "DEBUG", "INFO", "WARN", "ERROR" or "ALWAYS").
+ *     %i: Current thread id
  *     %%: A literal percent sign.
  *
  * The default format string is CLOG_DEFAULT_FORMAT.
@@ -286,7 +295,21 @@ const char *const CLOG_LEVEL_NAMES[] = {
     "INFO",
     "WARN",
     "ERROR",
+    "ALWAYS"
 };
+
+long 
+clog_get_tid()
+{
+    static long __thread cached_tid = -1;
+
+    if (cached_tid == -1)
+    {
+        cached_tid = syscall(__NR_gettid);
+    }
+
+    return cached_tid;
+}
 
 int
 clog_init_path(int id, const char *const path)
@@ -349,7 +372,7 @@ clog_set_level(int id, enum clog_level level)
     if (_clog_loggers[id] == NULL) {
         return 1;
     }
-    if ((unsigned) level > CLOG_ERROR) {
+    if ((unsigned) level > CLOG_ALWAYS) {
         return 1;
     }
     _clog_loggers[id]->level = level;
@@ -517,6 +540,9 @@ _clog_format(const struct clog *logger, char buf[], size_t buf_size,
                     cur_size = _clog_append_str(&result, buf, message,
                                                 cur_size);
                     break;
+                case 'i':
+                    cur_size = _clog_append_int(&result, buf, "%", clog_get_tid(), cur_size);
+                    break;
             }
             state = NORMAL;
         }
@@ -624,6 +650,15 @@ clog_error(const char *sfile, int sline, int id, const char *fmt, ...)
     va_list ap;
     va_start(ap, fmt);
     _clog_log(sfile, sline, CLOG_ERROR, id, fmt, ap);
+    va_end(ap);
+}
+
+void
+clog_always(const char *sfile, int sline, int id, const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    _clog_log(sfile, sline, CLOG_ALWAYS, id, fmt, ap);
     va_end(ap);
 }
 
